@@ -16,6 +16,7 @@
 #include "../record-struct/customer.h"
 #include "../record-struct/transaction.h"
 #include "../record-struct/emp.h"
+#include "../record-struct/loan.h"
 
 #include "./admin-credentials.h"
 #include "./server-constants.h"

@@ -14,9 +14,8 @@ int semIdentifier;
 bool emp_operation_handler(int connFD);
 bool add_customer(int connFD);
 bool modify_customer_info(int connFD);
-
-//void process_loan(int connFD);
-//void view_assgn_loan(int connFD);
+bool process_loan(int connFD);
+bool view_assignedloan(int connFD);
 
 // Function Definitions =================================
 
@@ -60,9 +59,9 @@ bool emp_operation_handler(int connFD)
                 modify_customer_info(connFD);
                 break;
             case 3:
-                //process_loan(connFD);
+                process_loan(connFD);
             case 4:
-                //view_assgn_loan(connFD);
+                view_assignedloan(connFD);
             case 5:
                 change_password(3,connFD,(void **)&loggedInEmployee);
                 break;
@@ -79,8 +78,6 @@ bool emp_operation_handler(int connFD)
     }
     return true;
 }
-
-
 
 
 
@@ -274,8 +271,6 @@ bool add_customer(int connFD)
 
     return true;
 }
-
-
 
 
 
@@ -518,5 +513,250 @@ bool modify_customer_info(int connFD)
     return true;
 }
 
+
+
+bool process_loan(int connFD){
+    ssize_t readBytes, writeBytes;
+    char readBuffer[1000], writeBuffer[1000];
+    struct Loan loan;
+    struct Employee emp;
+
+    int loanFileFD = open(LOAN_FILE, O_RDWR);
+    if (loanFileFD == -1) {
+        perror("Error opening loan file");
+        return false;
+    }
+
+    // Display all unassigned loans (status 0)
+    strcpy(writeBuffer, LOAN_ASSIGN_MSG);
+    write(connFD, writeBuffer, strlen(writeBuffer));
+
+    // Lock the file to read the loans
+    struct flock lock = {F_RDLCK, SEEK_SET, 0, 0, getpid()};
+    if (fcntl(loanFileFD, F_SETLKW, &lock) == -1) {
+        perror("Error obtaining read lock on loan file");
+        close(loanFileFD);
+        return false;
+    }
+
+    // Read through the file and display all unassigned loans
+    while (read(loanFileFD, &loan, sizeof(struct Loan)) == sizeof(struct Loan)) {
+        if (loan.status == 0) { // Only show unassigned loans
+            snprintf(writeBuffer, sizeof(writeBuffer), "Loan ID: %d, Customer ID: %d, Amount: %ld\n",
+                     loan.id, loan.custID, loan.amount);
+            write(connFD, writeBuffer, strlen(writeBuffer));
+        }
+    }
+
+    // Release the read lock and close the file temporarily
+    lock.l_type = F_UNLCK;
+    fcntl(loanFileFD, F_SETLK, &lock);
+    close(loanFileFD);
+
+    // Ask the manager to select a loan by its ID
+    strcpy(writeBuffer, SELECT_LOAN_MSG);
+    write(connFD, writeBuffer, strlen(writeBuffer));
+
+    bzero(readBuffer, sizeof(readBuffer));
+    readBytes = read(connFD, readBuffer, sizeof(readBuffer));
+    if (readBytes == -1) {
+        perror("Error reading selected loan ID from client");
+        return false;
+    }
+
+    int selectedLoanID = atoi(readBuffer);
+    if (selectedLoanID < 0) {
+        strcpy(writeBuffer, INVALID_LOAN_ID);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+        return false;
+    }
+
+    // Ask the manager to select an employee by their ID
+    strcpy(writeBuffer, SELECT_EMP_MSG);
+    write(connFD, writeBuffer, strlen(writeBuffer));
+
+    bzero(readBuffer, sizeof(readBuffer));
+    readBytes = read(connFD, readBuffer, sizeof(readBuffer));
+    if (readBytes == -1) {
+        perror("Error reading selected employee ID from client");
+        return false;
+    }
+
+    int selectedEmpID = atoi(readBuffer);
+    if (selectedEmpID < 0) {
+        strcpy(writeBuffer, INVALID_EMP_ID);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+        return false;
+    }
+
+    // Lock the loan file to update the selected loan
+    loanFileFD = open(LOAN_FILE, O_RDWR);
+    if (loanFileFD == -1) {
+        perror("Error reopening loan file for writing");
+        return false;
+    }
+
+    lock.l_type = F_WRLCK;
+    if (fcntl(loanFileFD, F_SETLKW, &lock) == -1) {
+        perror("Error obtaining write lock on loan file");
+        close(loanFileFD);
+        return false;
+    }
+
+    // Search for the selected loan and update it
+    bool loanFound = false;
+    while (read(loanFileFD, &loan, sizeof(struct Loan)) == sizeof(struct Loan)) {
+        if (loan.id == selectedLoanID) {
+            loan.empID = selectedEmpID;
+            loan.status = 1; // Assigned to an employee
+            lseek(loanFileFD, -sizeof(struct Loan), SEEK_CUR); // Move file pointer back to the beginning of this record
+            if (write(loanFileFD, &loan, sizeof(struct Loan)) == -1) {
+                perror("Error writing updated loan record to file");
+                close(loanFileFD);
+                return false;
+            }
+            loanFound = true;
+            break;
+        }
+    }
+
+    // Release the lock and close the file
+    lock.l_type = F_UNLCK;
+    fcntl(loanFileFD, F_SETLK, &lock);
+    close(loanFileFD);
+
+    // Notify the client of success or failure
+    if (loanFound) {
+        strcpy(writeBuffer, LOAN_ASSIGN_SUCCESS);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+        return true;
+    } else {
+        strcpy(writeBuffer, INVALID_LOAN_ID);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+        return false;
+    }
+}
+
+
+
+bool view_assignedloan(int connFD){
+    ssize_t readBytes, writeBytes;
+    char readBuffer[1000], writeBuffer[1000];
+    struct Loan loan;
+
+    int loanFileFD = open(LOAN_FILE, O_RDWR);
+    if (loanFileFD == -1) {
+        perror("Error opening loan file");
+        return false;
+    }
+
+    // Display all loans assigned to the logged-in employee
+    strcpy(writeBuffer, LOAN_VIEW_MSG);
+    write(connFD, writeBuffer, strlen(writeBuffer));
+
+    // Lock the file to read the loans
+    struct flock lock = {F_RDLCK, SEEK_SET, 0, 0, getpid()};
+    if (fcntl(loanFileFD, F_SETLKW, &lock) == -1) {
+        perror("Error obtaining read lock on loan file");
+        close(loanFileFD);
+        return false;
+    }
+
+    // Read through the file and display all loans assigned to this employee
+    while (read(loanFileFD, &loan, sizeof(struct Loan)) == sizeof(struct Loan)) {
+        if (loan.empID == loggedInEmployee->id && loan.status == 1) { // Only show loans assigned to this employee and with status 1
+            snprintf(writeBuffer, sizeof(writeBuffer), "Loan ID: %d, Customer ID: %d, Amount: %ld, Status: %d\n",
+                     loan.id, loan.custID, loan.amount, loan.status);
+            write(connFD, writeBuffer, strlen(writeBuffer));
+        }
+    }
+
+    // Release the read lock and close the file temporarily
+    lock.l_type = F_UNLCK;
+    fcntl(loanFileFD, F_SETLK, &lock);
+    close(loanFileFD);
+
+    // Ask the employee to select a loan by its ID
+    strcpy(writeBuffer, SELECT_LOAN_TO_UPDATE_MSG);
+    write(connFD, writeBuffer, strlen(writeBuffer));
+
+    bzero(readBuffer, sizeof(readBuffer));
+    readBytes = read(connFD, readBuffer, sizeof(readBuffer));
+    if (readBytes == -1) {
+        perror("Error reading selected loan ID from client");
+        return false;
+    }
+
+    int selectedLoanID = atoi(readBuffer);
+    if (selectedLoanID < 0) {
+        strcpy(writeBuffer, INVALID_LOAN_SELECTION);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+        return false;
+    }
+
+    // Ask the employee to enter the new status (2 for Accept, 3 for Reject)
+    strcpy(writeBuffer, LOAN_STATUS_PROMPT);
+    write(connFD, writeBuffer, strlen(writeBuffer));
+
+    bzero(readBuffer, sizeof(readBuffer));
+    readBytes = read(connFD, readBuffer, sizeof(readBuffer));
+    if (readBytes == -1) {
+        perror("Error reading new loan status from client");
+        return false;
+    }
+
+    int newStatus = atoi(readBuffer);
+    if (newStatus != 2 && newStatus != 3) {
+        strcpy(writeBuffer, INVALID_LOAN_STATUS);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+        return false;
+    }
+
+    // Lock the loan file to update the selected loan's status
+    loanFileFD = open(LOAN_FILE, O_RDWR);
+    if (loanFileFD == -1) {
+        perror("Error reopening loan file for writing");
+        return false;
+    }
+
+    lock.l_type = F_WRLCK;
+    if (fcntl(loanFileFD, F_SETLKW, &lock) == -1) {
+        perror("Error obtaining write lock on loan file");
+        close(loanFileFD);
+        return false;
+    }
+
+    // Search for the selected loan and update its status
+    bool loanFound = false;
+    while (read(loanFileFD, &loan, sizeof(struct Loan)) == sizeof(struct Loan)) {
+        if (loan.id == selectedLoanID && loan.empID == loggedInEmployee->id && loan.status == 1) {
+            loan.status = newStatus;
+            lseek(loanFileFD, -sizeof(struct Loan), SEEK_CUR); // Move file pointer back to the beginning of this record
+            if (write(loanFileFD, &loan, sizeof(struct Loan)) == -1) {
+                perror("Error writing updated loan record to file");
+                close(loanFileFD);
+                return false;
+            }
+            loanFound = true;
+            break;
+        }
+    }
+
+    // Release the lock and close the file
+    lock.l_type = F_UNLCK;
+    fcntl(loanFileFD, F_SETLK, &lock);
+    close(loanFileFD);
+
+    // Notify the client of success or failure
+    if (loanFound) {
+        strcpy(writeBuffer, LOAN_UPDATE_SUCCESS);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+        return true;
+    } else {
+        strcpy(writeBuffer, INVALID_LOAN_SELECTION);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+        return false;
+    }
+}
 
 #endif

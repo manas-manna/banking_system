@@ -20,12 +20,13 @@ bool customer_operation_handler(int connFD);
 bool deposit(int connFD);
 bool withdraw(int connFD);
 bool get_balance(int connFD);
+bool applyloan(int connFD);
 // bool get_account_details(int connFD, struct Account *account);
 bool get_customer_details(int connFD);
 bool get_transaction_details(int connFD);
 bool transfer(int connFD);
 bool add_transaction(int accountNumber, bool operation, long int oldBalance, long int newBalance);
-
+bool loanstatus(int connFD);
 // =====================================================
 
 // Function Definition =================================
@@ -85,13 +86,13 @@ bool customer_operation_handler(int connFD)
                 transfer(connFD);
                 break;
             case 6:
-                // apply_loan(connFD);
+                applyloan(connFD);
                 break;
             case 7:
                 change_password(1, connFD, (void **)&loggedInCustomer);
                 break;
             case 8:
-                // add_feedback(connFD);
+                loanstatus(connFD);
                 break;
             case 9:
                 get_transaction_details(connFD);
@@ -333,7 +334,7 @@ bool deposit(int connFD)
     }
 
     // Prompt for deposit amount
-    writeBytes = write(connFD, WITHDRAW_AMOUNT, strlen(WITHDRAW_AMOUNT));
+    writeBytes = write(connFD, DEPOSIT_AMOUNT, strlen(DEPOSIT_AMOUNT));
     if (writeBytes == -1)
     {
         perror("Error writing DEPOSIT_AMOUNT to client!");
@@ -378,7 +379,7 @@ bool deposit(int connFD)
         fcntl(customerFileDescriptor, F_SETLK, &lock);
 
         // Notify the client of success
-        write(connFD, DEPOSIT_AMOUNT_SUCCESS, strlen(DEPOSIT_AMOUNT_SUCCESS));
+        write(connFD, DEPOSIT_AMOUNT_SUCCESS, strlen(DEPOSIT_AMOUNT_SUCCESS)-1);
     }
     else
     {
@@ -441,7 +442,7 @@ bool withdraw(int connFD)
     }
 
     // Prompt for withdraw amount
-    writeBytes = write(connFD, WITHDRAW_AMOUNT, strlen(WITHDRAW_AMOUNT));
+    writeBytes = write(connFD, WITHDRAW_AMOUNT, strlen(WITHDRAW_AMOUNT)-1);
     if (writeBytes == -1)
     {
         perror("Error writing DEPOSIT_AMOUNT to client!");
@@ -671,6 +672,170 @@ bool get_transaction_details(int connFD)
     return true;
 }
 
+bool applyloan(int connFD) {
+    ssize_t readBytes, writeBytes;
+    char readBuffer[1000], writeBuffer[1000];
+    struct Loan newLoan;
+    int loanFileFD;
+
+    // Ask for the loan amount
+    strcpy(writeBuffer, LOAN_APPLY_MSG);
+    writeBytes = write(connFD, writeBuffer, strlen(writeBuffer));
+    if (writeBytes == -1) {
+        perror("Error writing loan apply message to the client");
+        return false;
+    }
+
+    // Read the loan amount from the client
+    bzero(readBuffer, sizeof(readBuffer));
+    readBytes = read(connFD, readBuffer, sizeof(readBuffer));
+    if (readBytes == -1) {
+        perror("Error reading loan amount from client");
+        return false;
+    }
+
+    long int loanAmount = atol(readBuffer);
+    if (loanAmount <= 0) {
+        strcpy(writeBuffer, INVALID_AMOUNT_MSG);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+        return false;
+    }
+
+    // Initialize the new loan record
+    newLoan.amount = loanAmount;
+    newLoan.custID = loggedInCustomer->id;
+    newLoan.status = 0; // Assigned to manager by default
+    newLoan.empID = -1; // Not assigned to any employee initially
+
+    // Open the loan file to write the new loan entry
+    loanFileFD = open(LOAN_FILE, O_RDWR | O_CREAT, 0644);
+    if (loanFileFD == -1) {
+        perror("Error opening loan file");
+        return false;
+    }
+
+    // Lock the file for writing
+    struct flock lock = {F_WRLCK, SEEK_SET, 0, 0, getpid()};
+    if (fcntl(loanFileFD, F_SETLKW, &lock) == -1) {
+        perror("Error obtaining write lock on loan file");
+        close(loanFileFD);
+        return false;
+    }
+
+    // Find the next available loan ID by reading the last entry in the file
+    off_t offset = lseek(loanFileFD, -sizeof(struct Loan), SEEK_END);
+    if (offset == -1 && errno != EINVAL) {
+        perror("Error finding end of loan file");
+        close(loanFileFD);
+        return false;
+    }
+
+    struct Loan lastLoan;
+    if (offset >= 0) {
+        // Read the last loan entry to get the ID
+        readBytes = read(loanFileFD, &lastLoan, sizeof(struct Loan));
+        if (readBytes == -1) {
+            perror("Error reading last loan entry");
+            close(loanFileFD);
+            return false;
+        }
+        newLoan.id = lastLoan.id + 1; // Increment the loan ID
+    } else {
+        // If no entries exist, set the first loan ID to 0
+        newLoan.id = 0;
+    }
+
+    // Write the new loan entry to the file
+    if (write(loanFileFD, &newLoan, sizeof(struct Loan)) != sizeof(struct Loan)) {
+        perror("Error writing new loan entry to loan file");
+        close(loanFileFD);
+        return false;
+    }
+
+    // Unlock the file and close it
+    lock.l_type = F_UNLCK;
+    fcntl(loanFileFD, F_SETLK, &lock);
+    close(loanFileFD);
+
+    // Notify the client of successful loan application
+    strcpy(writeBuffer, LOAN_APPLY_SUCCESS);
+    writeBytes = write(connFD, writeBuffer, strlen(writeBuffer)-1);
+    if (writeBytes == -1) {
+        perror("Error writing loan apply success message to the client");
+        return false;
+    }
+
+    return true;
+}
+
+bool loanstatus(int connFD){
+    ssize_t writeBytes;
+    char writeBuffer[1000];
+    struct Loan loan;
+
+    int loanFileFD = open(LOAN_FILE, O_RDONLY);
+    if (loanFileFD == -1) {
+        perror("Error opening loan file");
+        return false;
+    }
+
+    // Lock the file to read the loans
+    struct flock lock = {F_RDLCK, SEEK_SET, 0, 0, getpid()};
+    if (fcntl(loanFileFD, F_SETLKW, &lock) == -1) {
+        perror("Error obtaining read lock on loan file");
+        close(loanFileFD);
+        return false;
+    }
+
+    // Display header message to the customer
+    strcpy(writeBuffer, LOAN_STATUS_MSG);
+    write(connFD, writeBuffer, strlen(writeBuffer));
+
+    bool hasLoans = false;
+    // Read through the file and display all loans for the logged-in customer
+    while (read(loanFileFD, &loan, sizeof(struct Loan)) == sizeof(struct Loan)) {
+        if (loan.custID == loggedInCustomer->id) {
+            hasLoans = true;
+            // Display loan details along with status
+            const char *statusString;
+            switch (loan.status) {
+                case 0:
+                    statusString = "Applied & Assigned to Manager";
+                    break;
+                case 1:
+                    statusString = "Assigned to Employee";
+                    break;
+                case 2:
+                    statusString = "Accepted";
+                    break;
+                case 3:
+                    statusString = "Rejected";
+                    break;
+                default:
+                    statusString = "Unknown";
+                    break;
+            }
+
+            snprintf(writeBuffer, sizeof(writeBuffer),
+                     "Loan ID: %d, Amount: %ld, Status: %s\n",
+                     loan.id, loan.amount, statusString);
+            write(connFD, writeBuffer, strlen(writeBuffer));
+        }
+    }
+
+    // If no loans were found for this customer, send a message indicating this
+    if (!hasLoans) {
+        strcpy(writeBuffer, NO_LOANS_MSG);
+        write(connFD, writeBuffer, strlen(writeBuffer));
+    }
+
+    // Release the read lock and close the file
+    lock.l_type = F_UNLCK;
+    fcntl(loanFileFD, F_SETLK, &lock);
+    close(loanFileFD);
+
+    return true;
+}
 // =====================================================
 
 #endif
