@@ -81,6 +81,10 @@ bool emp_operation_handler(int connFD)
 }
 
 
+
+
+
+
 bool add_customer(int connFD)
 {
     ssize_t readBytes, writeBytes;
@@ -97,18 +101,11 @@ bool add_customer(int connFD)
         return false;
     }
 
-    // Check if the file is empty
     if (fileStat.st_size == 0)
     {
         // File is empty, this will be the first customer record
         newCustomer.id = 0;
-        close(customerFileDescriptor);
-    }
-
-    else if (customerFileDescriptor == -1)
-    {
-        perror("Error while opening customer file");
-        return -1;
+        close(customerFileDescriptor); // Close the file since we're done with it
     }
     else
     {
@@ -141,8 +138,10 @@ bool add_customer(int connFD)
 
         newCustomer.id = previousCustomer.id + 1;
     }
-    newCustomer.active = 1;
-    newCustomer.balance = 10000;
+    newCustomer.account=newCustomer.id;
+    newCustomer.active=1;
+    newCustomer.balance=1000;
+    memset(newCustomer.transactions, -1, MAX_TRANSACTIONS * sizeof(int));
 
     sprintf(writeBuffer, "%s%s", EMP_ADD_CUSTOMER, EMP_ADD_CUSTOMER_NAME);
 
@@ -162,6 +161,24 @@ bool add_customer(int connFD)
     }
 
     strcpy(newCustomer.name, readBuffer);
+
+    //taking password
+    writeBytes = write(connFD, EMP_ADD_CUSTOMER_PASSWORD, strlen(EMP_ADD_CUSTOMER_PASSWORD));
+    if (writeBytes == -1)
+    {
+        perror("Error writing EMP_ADD_CUSTOMER_PASSWORD message to client!");
+        return false;
+    }
+
+    bzero(readBuffer, sizeof(readBuffer));
+    readBytes = read(connFD, readBuffer, sizeof(readBuffer));
+    if (readBytes == -1)
+    {
+        perror("Error reading customer name response from client!");
+        return false;
+    }
+    strcpy(newCustomer.password, readBuffer);
+    /////////
 
     writeBytes = write(connFD, EMP_ADD_CUSTOMER_GENDER, strlen(EMP_ADD_CUSTOMER_GENDER));
     if (writeBytes == -1)
@@ -221,21 +238,12 @@ bool add_customer(int connFD)
     }
     newCustomer.age = customerAge;
 
-    newCustomer.account = newCustomer.id;
 
     strcpy(newCustomer.login, newCustomer.name);
     strcat(newCustomer.login, "-");
     sprintf(writeBuffer, "%d", newCustomer.id);
     strcat(newCustomer.login, writeBuffer);
 
-    char hashedPassword[1000];
-    //strcpy(hashedPassword, crypt(AUTOGEN_PASSWORD, SALT_BAE));
-    strcpy(hashedPassword, CUST_AUTOGEN_PASSWORD);
-    char idStr[5]; // Enough space for an integer as a string
-    snprintf(idStr, sizeof(idStr), "%d", newCustomer.id); // Convert id to string
-
-    strcat(hashedPassword, idStr);
-    strcpy(newCustomer.password, hashedPassword);
 
     customerFileDescriptor = open(CUSTOMER_FILE, O_CREAT | O_APPEND | O_WRONLY, S_IRWXU);
     if (customerFileDescriptor == -1)
@@ -253,7 +261,7 @@ bool add_customer(int connFD)
     close(customerFileDescriptor);
 
     memset(writeBuffer, 0, sizeof(writeBuffer));
-    sprintf(writeBuffer, "%s%s-%d\n%s%s\n%s%d", EMP_ADD_CUSTOMER_AUTOGEN_LOGIN, newCustomer.name, newCustomer.id, EMP_ADD_CUSTOMER_AUTOGEN_PASSWORD, newCustomer.password, EMP_ADD_ACCOUNT_NUMBER, newCustomer.account);
+    sprintf(writeBuffer, "%s%s-%d\n%s%s", EMP_ADD_CUSTOMER_AUTOGEN_LOGIN, newCustomer.name, newCustomer.id, EMP_ADD_CUSTOMER_AUTOGEN_PASSWORD, newCustomer.password);
     strcat(writeBuffer, "\nRedirecting you to the main menu ...^");
     writeBytes = write(connFD, writeBuffer, strlen(writeBuffer));
     if (writeBytes == -1)
@@ -262,9 +270,15 @@ bool add_customer(int connFD)
         return false;
     }
 
-    readBytes = read(connFD, readBuffer, sizeof(read)); // Dummy read
+    readBytes = read(connFD, readBuffer, sizeof(readBuffer)); // Dummy read
+
     return true;
 }
+
+
+
+
+
 
 bool modify_customer_info(int connFD)
 {

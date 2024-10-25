@@ -29,8 +29,6 @@ int semIdentifier;
 
 bool login_handler(int role, int connFD, void** ptr);
 bool change_password(int role, int connFD,void** ptr);
-bool lock_critical_section(struct sembuf *semOp);
-bool unlock_critical_section(struct sembuf *sem_op);
 
 // =====================================================
 

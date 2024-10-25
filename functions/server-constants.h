@@ -8,7 +8,7 @@
 
 // LOGIN
 #define LOGIN_ID "Enter your login ID"
-#define PASSWORD "Enter your password \n# "
+#define PASSWORD "Enter your password"
 #define INVALID_LOGIN "The login ID specified doesn't exist!$"
 #define INVALID_PASSWORD "The password specified doesn't match!$"
 //#define SALT_BAE "666"
@@ -42,6 +42,7 @@
 // ADD EMPLOYEE
 #define ADMIN_ADD_EMPLOYEE "Enter details for the employee\n"
 #define ADMIN_ADD_EMPLOYEE_NAME "Employee Name?"
+#define ADMIN_ADD_EMPLOYEE_PASSWORD "Enter Password"
 #define ADMIN_ADD_EMPLOYEE_GENDER "Gender?\nEnter M for male, F for female and O for others"
 #define ADMIN_ADD_EMPLOYEE_ROLE "Role?\n(E for Employee or M for Manager)"
 #define ADMIN_ADD_EMPLOYEE_AGE "Age?"
@@ -108,8 +109,9 @@
 
 // ADD CUSTOMER
 #define EMP_ADD_CUSTOMER "Enter the details of the customer\n"
-#define EMP_ADD_CUSTOMER_NAME "Name?"
-#define EMP_ADD_CUSTOMER_GENDER "Gender?\nEnter M for male, F for female and O for others"
+#define EMP_ADD_CUSTOMER_NAME "Name:"
+#define EMP_ADD_CUSTOMER_PASSWORD "Enter the password:"
+#define EMP_ADD_CUSTOMER_GENDER "Enter Gender?\nEnter M for male, F for female and O for others"
 #define EMP_ADD_CUSTOMER_AGE "Age?"
 #define EMP_ADD_CUSTOMER_AUTOGEN_LOGIN "Login ID for the customer is : "
 #define CUST_AUTOGEN_PASSWORD "cpass" // append to end of next string macro

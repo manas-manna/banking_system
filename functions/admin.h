@@ -8,7 +8,7 @@
 bool admin_operation_handler(int connFD);
 int add_employee(int connFD);
 bool modify_emp_info(int connFD);
-//bool modify_user_role(int connFD);
+// bool modify_user_role(int connFD);
 
 bool admin_operation_handler(int connFD)
 {
@@ -47,11 +47,11 @@ bool admin_operation_handler(int connFD)
             case 2:
                 modify_emp_info(connFD);
                 break;
-            case 3: 
-                //manage_user_roles(connFD);
+            case 3:
+                // manage_user_roles(connFD);
                 break;
             case 4:
-                //change_password
+                // change_password
                 break;
             default:
                 writeBytes = write(connFD, ADMIN_LOGOUT, strlen(ADMIN_LOGOUT));
@@ -75,18 +75,23 @@ int add_employee(int connFD)
     struct Employee newEmployee, previousEmployee;
 
     int employeeFileDescriptor = open(EMP_FILE, O_RDONLY);
-    if (employeeFileDescriptor == -1 && errno == ENOENT)
+    // Check if the file is empty
+    struct stat fileStat;
+    if (fstat(employeeFileDescriptor, &fileStat) == -1)
     {
-        // Employee file was never created
-        newEmployee.id = 0;
+        perror("Error obtaining file statistics!");
+        close(employeeFileDescriptor);
+        return false;
     }
-    else if (employeeFileDescriptor == -1)
+
+    if (fileStat.st_size == 0)
     {
-        perror("Error while opening employee file");
-        return -1;
+        // File is empty, this will be the first customer record
+        newEmployee.id = 0;
+        close(employeeFileDescriptor); // Close the file since we're done with it
     }
     else
-    {   //Reading last created employee's id so that new_empid= old_empid + 1
+    { // Reading last created employee's id so that new_empid= old_empid + 1
 
         int offset = lseek(employeeFileDescriptor, -sizeof(struct Employee), SEEK_END);
         if (offset == -1)
@@ -117,7 +122,8 @@ int add_employee(int connFD)
 
         newEmployee.id = previousEmployee.id + 1;
     }
-
+    memset(newEmployee.name, 0, sizeof(newEmployee.name));
+    memset(newEmployee.password, 0, sizeof(newEmployee.password));
     sprintf(writeBuffer, "%s%s", ADMIN_ADD_EMPLOYEE, ADMIN_ADD_EMPLOYEE_NAME);
     writeBytes = write(connFD, writeBuffer, sizeof(writeBuffer));
     if (writeBytes == -1)
@@ -125,7 +131,8 @@ int add_employee(int connFD)
         perror("Error writing ADMIN_ADD_EMPLOYEE_NAME message to client!");
         return false;
     }
-
+    bzero(readBuffer, sizeof(readBuffer));
+    memset(readBuffer, 0, sizeof(readBuffer));
     readBytes = read(connFD, readBuffer, sizeof(readBuffer));
     if (readBytes == -1)
     {
@@ -134,6 +141,24 @@ int add_employee(int connFD)
     }
 
     strcpy(newEmployee.name, readBuffer);
+
+    writeBytes = write(connFD, ADMIN_ADD_EMPLOYEE_PASSWORD, strlen(ADMIN_ADD_EMPLOYEE_PASSWORD));
+    if (writeBytes == -1)
+    {
+        perror("Error writing ADMIN_ADD_EMPLOYEE_PASSWORD message to client!");
+        return false;
+    }
+
+    bzero(readBuffer, sizeof(readBuffer));
+    memset(readBuffer, 0, sizeof(readBuffer));
+    readBytes = read(connFD, readBuffer, sizeof(readBuffer));
+    if (readBytes == -1)
+    {
+        perror("Error reading employee password response from client!");
+        return false;
+    }
+
+    strcpy(newEmployee.password, readBuffer);
 
     writeBytes = write(connFD, ADMIN_ADD_EMPLOYEE_GENDER, strlen(ADMIN_ADD_EMPLOYEE_GENDER));
     if (writeBytes == -1)
@@ -159,7 +184,7 @@ int add_employee(int connFD)
         return false;
     }
 
-        writeBytes = write(connFD, ADMIN_ADD_EMPLOYEE_ROLE, strlen(ADMIN_ADD_EMPLOYEE_ROLE));
+    writeBytes = write(connFD, ADMIN_ADD_EMPLOYEE_ROLE, strlen(ADMIN_ADD_EMPLOYEE_ROLE));
     if (writeBytes == -1)
     {
         perror("Error writing ADMIN_ADD_EMPLOYEE_GENDER message to client!");
@@ -182,8 +207,7 @@ int add_employee(int connFD)
         readBytes = read(connFD, readBuffer, sizeof(readBuffer)); // Dummy read
         return false;
     }
-        
-        
+
     memset(writeBuffer, 0, sizeof(writeBuffer));
     strcpy(writeBuffer, ADMIN_ADD_EMPLOYEE_AGE);
     writeBytes = write(connFD, writeBuffer, strlen(writeBuffer));
@@ -222,14 +246,6 @@ int add_employee(int connFD)
     strcat(newEmployee.login, "-");
     sprintf(writeBuffer, "%d", newEmployee.id);
     strcat(newEmployee.login, writeBuffer);
-
-    char hashedPassword[1000];
-    //strcpy(hashedPassword, crypt(AUTOGEN_PASSWORD, SALT_BAE));
-    strcpy(hashedPassword, EMP_AUTOGEN_PASSWORD);
-    char idStr[5];
-    snprintf(idStr, sizeof(idStr), "%d", newEmployee.id); // Convert id to string
-    strcat(hashedPassword, idStr);
-    strcpy(newEmployee.password, hashedPassword);
 
     employeeFileDescriptor = open(EMP_FILE, O_CREAT | O_APPEND | O_WRONLY, S_IRWXU);
     if (employeeFileDescriptor == -1)
@@ -720,7 +736,7 @@ bool modify_emp_info(int connFD)
         readBytes = read(connFD, readBuffer, sizeof(readBuffer)); // Dummy read
         return false;
     }
-    
+
     offset = lseek(employeeFileDescriptor, employeeID * sizeof(struct Employee), SEEK_SET);
     if (errno == EINVAL)
     {
