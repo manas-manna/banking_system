@@ -82,6 +82,7 @@ int connection_handler(int connectionFileDescriptor)
     char readBuffer[1000], writeBuffer[1000];
     ssize_t readBytes, writeBytes;
     int userChoice, home=1;
+    
     do{
         writeBytes = write(connectionFileDescriptor, INITIAL_PROMPT, strlen(INITIAL_PROMPT));
         if (writeBytes == -1){
@@ -114,7 +115,6 @@ int connection_handler(int connectionFileDescriptor)
                 break;
             case 4:
                 // Manager Handler
-                //man_operation_handler(connectionFileDescriptor);
                 break;
             default:
                 // Exiting

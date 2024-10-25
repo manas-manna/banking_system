@@ -3,9 +3,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/socket.h> 
-#include <netinet/ip.h> 
-#include <string.h> 
+#include <sys/socket.h>
+#include <netinet/ip.h>
+#include <string.h>
 
 void connection_handler(int sockFD); // Handles the read & write operations to the server
 
@@ -42,8 +42,8 @@ int main()
 // Handles the read & write operations w the server
 void connection_handler(int sockFD)
 {
-    char readBuffer[1000], writeBuffer[1000]; 
-    ssize_t readBytes, writeBytes; 
+    char readBuffer[1000], writeBuffer[1000];
+    ssize_t readBytes, writeBytes;
 
     char tempBuffer[1000];
 
@@ -73,14 +73,15 @@ void connection_handler(int sockFD)
             // Taking back to Home menu in case of logouts or invalid login credentials
             strncpy(tempBuffer, readBuffer, strlen(readBuffer) - 2);
             printf("%s\n", tempBuffer);
-            strcpy(writeBuffer,"Taking you HOME...");
+            strcpy(writeBuffer, "Taking you HOME...");
             write(sockFD, writeBuffer, strlen(writeBuffer));
-            printf("%s\n",writeBuffer);
+            printf("%s\n", writeBuffer);
         }
-        else if(strchr(readBuffer, '*') != NULL){
+        else if (strchr(readBuffer, '*') != NULL)
+        {
             strcpy(writeBuffer, "User wants to exit...");
             write(sockFD, writeBuffer, strlen(writeBuffer));
-            printf("%sExiting...\n",writeBuffer);
+            printf("%sExiting...\n", writeBuffer);
             break;
         }
         else
@@ -93,6 +94,8 @@ void connection_handler(int sockFD)
             {
                 printf("%s\n", readBuffer);
                 scanf("%[^\n]%*c", writeBuffer); // Take user input!
+                // fgets(writeBuffer, sizeof(writeBuffer), stdin);
+                // printf("from client: %s",writeBuffer);
             }
 
             writeBytes = write(sockFD, writeBuffer, strlen(writeBuffer));
@@ -102,7 +105,7 @@ void connection_handler(int sockFD)
                 printf("Closing the connection to the server now!\n");
                 break;
             }
-            //continue;
+            // continue;
         }
     } while (readBytes > 0);
 

@@ -62,8 +62,7 @@ Step 1: Get the server up and running
 Step 2: Run the client program
 - Compile the client program
     ```bash
-        gcc -o client client.c -I./functions -I./re
-cord-struct
+        gcc -o client client.c -I./functions -I./record-struct
     ```
 - Run the client program for every user
     ```bash

@@ -83,6 +83,11 @@
 #define WITHDRAW_AMOUNT_INVALID "Entered invalid amount^"
 #define WITHDRAW_AMOUNT_SUCCESS "Successfully withdrawn money!^"
 
+#define TRANSFER_AMOUNT "Amount to transfer?"
+#define TRANSFER_ACCOUNT "Account to transfer?"
+#define DEPOSIT_AMOUNT_INVALID "Invalid amount!^"
+#define TRANSFER_AMOUNT_SUCCESS "Successfully transfered money!^"
+
 #define PASSWORD_CHANGE_OLD_PASS "Enter old password"
 #define PASSWORD_CHANGE_OLD_PASS_INVALID "The entered password doesn't match with the old password"
 #define PASSWORD_CHANGE_NEW_PASS "Enter new password"
@@ -134,10 +139,10 @@
 
 
 
-#define EMP_FILE "./records/emp.bank"
-#define ACCOUNT_FILE "./records/account.bank"
-#define CUSTOMER_FILE "./records/customer.bank"
-#define TRANSACTION_FILE "./records/transactions.bank"
-#define LOAN_FILE "./records/loan.bank"
+#define EMP_FILE "./records/emp.dat"
+#define ACCOUNT_FILE "./records/account.dat"
+#define CUSTOMER_FILE "./records/customer.dat"
+#define TRANSACTION_FILE "./records/transactions.dat"
+#define LOAN_FILE "./records/loan.dat"
 
 #endif

@@ -17,13 +17,6 @@ struct Transaction {
     time_t transactionTime;
 };
 
-struct Account {
-    int accountNumber;
-    bool active; // 1 for active, 0 for inactive
-    long int balance;
-    int transactions[MAX_TRANSACTIONS];
-};
-
 struct Employee {
     int id;
     char name[25];
@@ -34,14 +27,20 @@ struct Employee {
     char password[30];
 };
 
-struct Customer {
-    int id;
+struct Customer
+{
+    int id; // 0, 1, 2 ....
     char name[25];
     char gender; // M -> Male, F -> Female, O -> Other
     int age;
-    char login[30]; // Format: name-id
+    // Login Credentials
+    char login[30]; // Format : name-id (name will the first word in the structure member `name`)
     char password[30];
+    // Bank data
     int account; // Account number of the account the customer owns
+    bool active;           // 1 -> Active, 0 -> Deactivated (Deleted)
+    long int balance;      // Amount of money in the account
+    int transactions[MAX_TRANSACTIONS];  // A list of transaction IDs. Used to look up the transactions. // -1 indicates unused space in array
 };
 
 void readTransaction(int fd) {
@@ -63,22 +62,7 @@ void readTransaction(int fd) {
     }
 }
 
-void readAccount(int fd) {
-    struct Account a;
-    ssize_t bytesRead;
 
-    printf("\nReading Accounts:\n");
-    while ((bytesRead = read(fd, &a, sizeof(struct Account))) > 0) {
-        printf("Account Number: %d, Active: %d, Balance: %ld, Transactions: [",
-               a.accountNumber, a.active, a.balance);
-        for(int i=0;i<10;i++) printf(" %d",a.transactions[i]);
-        printf("]\n");
-    }
-
-    if (bytesRead == -1) {
-        perror("Error reading account");
-    }
-}
 
 void readEmployee(int fd) {
     struct Employee e;
@@ -101,7 +85,7 @@ void readCustomer(int fd) {
 
     printf("\nReading Customers:\n");
     while ((bytesRead = read(fd, &c, sizeof(struct Customer))) > 0) {
-        printf("Customer ID: %d, Name: %s, Gender: %c, Age: %d, Login: %s, Password: %s, Account: %d\n",c.id, c.name, c.gender, c.age,c.login,c.password,c.account);
+        printf("Customer ID: %d, Name: %s, Gender: %c, Age: %d, Login: %s, Password: %s, Account: %d, Active: %d, Balance: %ld\n",c.id, c.name, c.gender, c.age,c.login,c.password,c.account,c.active,c.balance);
     }
 
     if (bytesRead == -1) {
@@ -110,14 +94,14 @@ void readCustomer(int fd) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 5) {
-        fprintf(stderr, "Usage: %s <transaction_file> <account_file> <employee_file> <customer_file>\n", argv[0]);
+    if (argc < 4) {
+        fprintf(stderr, "Usage: %s <transaction_file> <employee_file> <customer_file>\n", argv[0]);
         return 1;
     }
 
     int fd;
 
-    /*// Read Transactions
+    // Read Transactions
     fd = open(argv[1], O_RDONLY);
     if (fd == -1) {
         perror("Error opening transaction file");
@@ -125,18 +109,10 @@ int main(int argc, char *argv[]) {
     }
     readTransaction(fd);
     close(fd);
-*/
-    // Read Accounts
-    fd = open(argv[2], O_RDONLY);
-    if (fd == -1) {
-        perror("Error opening account file");
-        return 1;
-    }
-    readAccount(fd);
-    close(fd);
+
 
     // Read Employees
-    fd = open(argv[3], O_RDONLY);
+    fd = open(argv[2], O_RDONLY);
     if (fd == -1) {
         perror("Error opening employee file");
         return 1;
@@ -145,7 +121,7 @@ int main(int argc, char *argv[]) {
     close(fd);
 
     // Read Customers
-    fd = open(argv[4], O_RDONLY);
+    fd = open(argv[3], O_RDONLY);
     if (fd == -1) {
         perror("Error opening customer file");
         return 1;

@@ -6,14 +6,13 @@
 
 #include "common.h"
 
-struct Employee loggedInEmployee;
+struct Employee* loggedInEmployee = NULL;
 int semIdentifier;
 
 // Function Prototypes =================================
 
 bool emp_operation_handler(int connFD);
-bool add_account(int connFD);
-int add_customer(int connFD,  int newAccountNumber);
+bool add_customer(int connFD);
 bool modify_customer_info(int connFD);
 
 //void process_loan(int connFD);
@@ -25,7 +24,7 @@ bool modify_customer_info(int connFD);
 bool emp_operation_handler(int connFD)
 {
 
-    if (login_handler(3, connFD, &loggedInEmployee))
+    if (login_handler(3, connFD, (void**)&loggedInEmployee))
     {
         ssize_t writeBytes, readBytes;            // Number of bytes read from / written to the client
         char readBuffer[1000], writeBuffer[1000]; // A buffer used for reading & writing to the client
@@ -55,7 +54,7 @@ bool emp_operation_handler(int connFD)
             switch (choice)
             {
             case 1:
-                add_account(connFD);
+                add_customer(connFD);
                 break;
             case 2:
                 modify_customer_info(connFD);
@@ -65,7 +64,7 @@ bool emp_operation_handler(int connFD)
             case 4:
                 //view_assgn_loan(connFD);
             case 5:
-                change_password(3,connFD,&loggedInEmployee);
+                change_password(3,connFD,(void **)&loggedInEmployee);
                 break;
             default:
                 writeBytes = write(connFD, EMP_LOGOUT, strlen(EMP_LOGOUT));
@@ -81,88 +80,8 @@ bool emp_operation_handler(int connFD)
     return true;
 }
 
-bool add_account(int connFD)
-{
-    ssize_t readBytes, writeBytes;
-    char readBuffer[1000], writeBuffer[1000];
 
-    struct Account newAccount, prevAccount;
-
-    int accountFileDescriptor = open(ACCOUNT_FILE, O_RDONLY);
-    if (accountFileDescriptor == -1 && errno == ENOENT)
-    {
-        // Account file was never created
-        newAccount.accountNumber = 0;
-    }
-    else if (accountFileDescriptor == -1)
-    {
-        perror("Error while opening account file");
-        return false;
-    }
-    else
-    {
-        int offset = lseek(accountFileDescriptor, -sizeof(struct Account), SEEK_END);
-        if (offset == -1)
-        {
-            perror("Error seeking to last Account record!");
-            return false;
-        }
-
-        struct flock lock = {F_RDLCK, SEEK_SET, offset, sizeof(struct Account), getpid()};
-        int lockingStatus = fcntl(accountFileDescriptor, F_SETLKW, &lock);
-        if (lockingStatus == -1)
-        {
-            perror("Error obtaining read lock on Account record!");
-            return false;
-        }
-
-        readBytes = read(accountFileDescriptor, &prevAccount, sizeof(struct Account));
-        if (readBytes == -1)
-        {
-            perror("Error while reading Account record from file!");
-            return false;
-        }
-
-        lock.l_type = F_UNLCK;
-        fcntl(accountFileDescriptor, F_SETLK, &lock);
-
-        close(accountFileDescriptor);
-
-        newAccount.accountNumber = prevAccount.accountNumber + 1;
-    }
-    
-    newAccount.active = true;
-    newAccount.balance = 0;
-
-    memset(newAccount.transactions, -1, MAX_TRANSACTIONS * sizeof(int));
-
-    accountFileDescriptor = open(ACCOUNT_FILE, O_CREAT | O_APPEND | O_WRONLY, S_IRWXU);
-    if (accountFileDescriptor == -1)
-    {
-        perror("Error while creating / opening account file!");
-        return false;
-    }
-
-    writeBytes = write(accountFileDescriptor, &newAccount, sizeof(struct Account));
-    if (writeBytes == -1)
-    {
-        perror("Error while writing Account record to file!");
-        return false;
-    }
-
-    close(accountFileDescriptor);
-
-    add_customer(connFD,newAccount.accountNumber);
-
-    memset(writeBuffer, 0, sizeof(writeBuffer));
-    sprintf(writeBuffer, "%s%d", EMP_ADD_ACCOUNT_NUMBER, newAccount.accountNumber);
-    strcat(writeBuffer, "\nRedirecting you to the main menu ...^");
-    writeBytes = write(connFD, writeBuffer, sizeof(writeBuffer));
-    readBytes = read(connFD, readBuffer, sizeof(read)); // Dummy read
-    return true;
-}
-
-int add_customer(int connFD, int newAccountNumber)
+bool add_customer(int connFD)
 {
     ssize_t readBytes, writeBytes;
     char readBuffer[1000], writeBuffer[1000];
@@ -170,11 +89,22 @@ int add_customer(int connFD, int newAccountNumber)
     struct Customer newCustomer, previousCustomer;
 
     int customerFileDescriptor = open(CUSTOMER_FILE, O_RDONLY);
-    if (customerFileDescriptor == -1 && errno == ENOENT)
+    struct stat fileStat;
+    if (fstat(customerFileDescriptor, &fileStat) == -1)
     {
-        // Customer file was never created
-        newCustomer.id = 0;
+        perror("Error obtaining file statistics!");
+        close(customerFileDescriptor);
+        return false;
     }
+
+    // Check if the file is empty
+    if (fileStat.st_size == 0)
+    {
+        // File is empty, this will be the first customer record
+        newCustomer.id = 0;
+        close(customerFileDescriptor);
+    }
+
     else if (customerFileDescriptor == -1)
     {
         perror("Error while opening customer file");
@@ -211,6 +141,8 @@ int add_customer(int connFD, int newAccountNumber)
 
         newCustomer.id = previousCustomer.id + 1;
     }
+    newCustomer.active = 1;
+    newCustomer.balance = 10000;
 
     sprintf(writeBuffer, "%s%s", EMP_ADD_CUSTOMER, EMP_ADD_CUSTOMER_NAME);
 
@@ -289,7 +221,7 @@ int add_customer(int connFD, int newAccountNumber)
     }
     newCustomer.age = customerAge;
 
-    newCustomer.account = newAccountNumber;
+    newCustomer.account = newCustomer.id;
 
     strcpy(newCustomer.login, newCustomer.name);
     strcat(newCustomer.login, "-");
@@ -321,8 +253,8 @@ int add_customer(int connFD, int newAccountNumber)
     close(customerFileDescriptor);
 
     memset(writeBuffer, 0, sizeof(writeBuffer));
-    sprintf(writeBuffer, "%s%s-%d\n%s%s", EMP_ADD_CUSTOMER_AUTOGEN_LOGIN, newCustomer.name, newCustomer.id, EMP_ADD_CUSTOMER_AUTOGEN_PASSWORD, newCustomer.password);
-    strcat(writeBuffer, "^");
+    sprintf(writeBuffer, "%s%s-%d\n%s%s\n%s%d", EMP_ADD_CUSTOMER_AUTOGEN_LOGIN, newCustomer.name, newCustomer.id, EMP_ADD_CUSTOMER_AUTOGEN_PASSWORD, newCustomer.password, EMP_ADD_ACCOUNT_NUMBER, newCustomer.account);
+    strcat(writeBuffer, "\nRedirecting you to the main menu ...^");
     writeBytes = write(connFD, writeBuffer, strlen(writeBuffer));
     if (writeBytes == -1)
     {
@@ -330,9 +262,8 @@ int add_customer(int connFD, int newAccountNumber)
         return false;
     }
 
-    readBytes = read(connFD, readBuffer, sizeof(readBuffer)); // Dummy read
-
-    return newCustomer.id;
+    readBytes = read(connFD, readBuffer, sizeof(read)); // Dummy read
+    return true;
 }
 
 bool modify_customer_info(int connFD)

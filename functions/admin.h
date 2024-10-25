@@ -6,7 +6,6 @@
 #include "./common.h"
 
 bool admin_operation_handler(int connFD);
-bool add_account(int connFD);
 int add_employee(int connFD);
 bool modify_emp_info(int connFD);
 //bool modify_user_role(int connFD);
@@ -155,7 +154,7 @@ int add_employee(int connFD)
         newEmployee.gender = readBuffer[0];
     else
     {
-        writeBytes = write(connFD, ADMIN_ADD_EMPLOYEE_WRONG_GENDER, strlen(ADMIN_ADD_EMPLOYEE_WRONG_GENDER));
+        writeBytes = write(connFD, INVALID_MENU_CHOICE, strlen(INVALID_MENU_CHOICE));
         readBytes = read(connFD, readBuffer, sizeof(readBuffer)); // Dummy read
         return false;
     }
@@ -179,7 +178,7 @@ int add_employee(int connFD)
         newEmployee.role = readBuffer[0];
     else
     {
-        writeBytes = write(connFD, ADMIN_ADD_EMPLOYEE_WRONG_ROLE, strlen(ADMIN_ADD_EMPLOYEE_WRONG_ROLE));
+        writeBytes = write(connFD, INVALID_MENU_CHOICE, strlen(INVALID_MENU_CHOICE));
         readBytes = read(connFD, readBuffer, sizeof(readBuffer)); // Dummy read
         return false;
     }
@@ -227,7 +226,7 @@ int add_employee(int connFD)
     char hashedPassword[1000];
     //strcpy(hashedPassword, crypt(AUTOGEN_PASSWORD, SALT_BAE));
     strcpy(hashedPassword, EMP_AUTOGEN_PASSWORD);
-    char idStr[5]; // Enough space for an integer as a string
+    char idStr[5];
     snprintf(idStr, sizeof(idStr), "%d", newEmployee.id); // Convert id to string
     strcat(hashedPassword, idStr);
     strcpy(newEmployee.password, hashedPassword);
